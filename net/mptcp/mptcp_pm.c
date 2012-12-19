@@ -358,18 +358,18 @@ out:
 	rcu_read_unlock();
 }
 
-int mptcp_check_req(struct sk_buff *skb)
+int mptcp_check_req(struct sk_buff *skb, struct net *net)
 {
 	struct tcphdr *th = tcp_hdr(skb);
 	struct sock *meta_sk = NULL;
 
 	if (skb->protocol == htons(ETH_P_IP))
 		meta_sk = mptcp_v4_search_req(th->source, ip_hdr(skb)->saddr,
-					      ip_hdr(skb)->daddr, dev_net(skb_dst(skb)->dev));
+					      ip_hdr(skb)->daddr, net);
 #if IS_ENABLED(CONFIG_IPV6)
 	else /* IPv6 */
 		meta_sk = mptcp_v6_search_req(th->source, &ipv6_hdr(skb)->saddr,
-					      &ipv6_hdr(skb)->daddr, dev_net(skb_dst(skb)->dev));
+					      &ipv6_hdr(skb)->daddr, net);
 #endif /* CONFIG_IPV6 */
 
 	if (!meta_sk)
@@ -382,8 +382,7 @@ int mptcp_check_req(struct sk_buff *skb)
 		skb->sk = meta_sk;
 		if (unlikely(sk_add_backlog(meta_sk, skb))) {
 			bh_unlock_sock(meta_sk);
-			NET_INC_STATS_BH(dev_net(skb->dev),
-					LINUX_MIB_TCPBACKLOGDROP);
+			NET_INC_STATS_BH(net, LINUX_MIB_TCPBACKLOGDROP);
 			sock_put(meta_sk); /* Taken by mptcp_search_req */
 			kfree_skb(skb);
 			return 1;
@@ -475,7 +474,7 @@ int mptcp_lookup_join(struct sk_buff *skb, struct inet_timewait_sock *tw)
 		skb->sk = meta_sk;
 		if (unlikely(sk_add_backlog(meta_sk, skb))) {
 			bh_unlock_sock(meta_sk);
-			NET_INC_STATS_BH(dev_net(skb->dev),
+			NET_INC_STATS_BH(sock_net(meta_sk),
 					LINUX_MIB_TCPBACKLOGDROP);
 			sock_put(meta_sk); /* Taken by mptcp_hash_find */
 			kfree_skb(skb);
@@ -493,13 +492,13 @@ int mptcp_lookup_join(struct sk_buff *skb, struct inet_timewait_sock *tw)
 }
 
 int mptcp_do_join_short(struct sk_buff *skb, struct multipath_options *mopt,
-			struct tcp_options_received *tmp_opt)
+			struct tcp_options_received *tmp_opt, struct net *net)
 {
 	struct sock *meta_sk;
 	u32 token;
 
 	token = mopt->mptcp_rem_token;
-	meta_sk = mptcp_hash_find(dev_net(skb_dst(skb)->dev), token);
+	meta_sk = mptcp_hash_find(net, token);
 	if (!meta_sk) {
 		mptcp_debug("%s:mpcb not found:%x\n", __func__, token);
 		return -1;
@@ -520,8 +519,7 @@ int mptcp_do_join_short(struct sk_buff *skb, struct multipath_options *mopt,
 		TCP_SKB_CB(skb)->mptcp_flags = MPTCPHDR_JOIN;
 
 		if (unlikely(sk_add_backlog(meta_sk, skb))) {
-			NET_INC_STATS_BH(dev_net(skb->dev),
-					LINUX_MIB_TCPBACKLOGDROP);
+			NET_INC_STATS_BH(net, LINUX_MIB_TCPBACKLOGDROP);
 		} else {
 			/* Must make sure that upper layers won't free the
 			 * skb if it is added to the backlog-queue.
