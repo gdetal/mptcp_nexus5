@@ -3839,10 +3839,8 @@ old_ack:
  * But, this can also be called on packets in the established flow when
  * the fast version below fails.
  */
-static void __tcp_parse_options(const struct sk_buff *skb,
-				struct tcp_options_received *opt_rx,
-				const u8 **hvpp, struct mptcp_options_received *mopt,
-				int estab, int fast)
+void tcp_parse_options(const struct sk_buff *skb, struct tcp_options_received *opt_rx,
+		       const u8 **hvpp, struct mptcp_options_received *mopt, int estab)
 {
 	const unsigned char *ptr;
 	const struct tcphdr *th = tcp_hdr(skb);
@@ -3951,13 +3949,8 @@ static void __tcp_parse_options(const struct sk_buff *skb,
 				}
 				break;
 			case TCPOPT_MPTCP:
-				/* Does not parse TCP options if coming from
-				 * tcp_fast_parse_options. They will be parsed
-				 * later.
-				 */
-				if (!fast)
-					mptcp_parse_options(ptr - 2, opsize,
-							    opt_rx, mopt, skb);
+				mptcp_parse_options(ptr - 2, opsize, opt_rx,
+						    mopt, skb);
 				break;
 			}
 
@@ -3965,12 +3958,6 @@ static void __tcp_parse_options(const struct sk_buff *skb,
 			length -= opsize;
 		}
 	}
-}
-
-void tcp_parse_options(const struct sk_buff *skb, struct tcp_options_received *opt_rx,
-		       const u8 **hvpp, struct mptcp_options_received *mopt, int estab)
-{
-	__tcp_parse_options(skb, opt_rx, hvpp, mopt, estab, 0);
 }
 EXPORT_SYMBOL(tcp_parse_options);
 
@@ -4008,8 +3995,8 @@ static int tcp_fast_parse_options(const struct sk_buff *skb,
 		if (tcp_parse_aligned_timestamp(tp, th))
 			return 1;
 	}
-	__tcp_parse_options(skb, &tp->rx_opt, hvpp,
-			    tp->mpc ? &tp->mptcp->rx_opt : NULL, 1, 1);
+	tcp_parse_options(skb, &tp->rx_opt, hvpp,
+			    tp->mpc ? &tp->mptcp->rx_opt : NULL, 1);
 
 	return 1;
 }
@@ -5466,8 +5453,6 @@ static int tcp_validate_incoming(struct sock *sk, struct sk_buff *skb,
 			tcp_send_delayed_ack(sk);
 			tp->mptcp->rx_opt.join_ack = 0;
 		}
-
-		mptcp_post_parse_options(sk, skb);
 
 		mptcp_path_array_check(mptcp_meta_sk(sk));
 		/* Socket may have been mp_killed by a REMOVE_ADDR */
