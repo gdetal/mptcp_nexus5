@@ -777,6 +777,7 @@ cont_ipv6:
 		if (!in6_dev)
 			continue;
 
+		read_lock(&in6_dev->lock);
 		list_for_each_entry(ifa6, &in6_dev->addr_list, if_list) {
 			unsigned long event;
 
@@ -792,6 +793,7 @@ cont_ipv6:
 
 			mptcp_pm_addr6_event_handler(ifa6, event, mpcb);
 		}
+		read_unlock(&in6_dev->lock);
 #endif
 	}
 
@@ -860,12 +862,15 @@ next_loc_addr:
 			    !in6_dev)
 				continue;
 
-
+			read_lock(&in6_dev->lock);
 			list_for_each_entry(ifa6, &in6_dev->addr_list, if_list) {
 				if (ipv6_addr_equal(&mpcb->locaddr6[i].addr, &ifa6->addr) &&
-				    netif_running(dev))
+				    netif_running(dev)) {
+					read_unlock(&in6_dev->lock);
 					goto next_loc6_addr;
+				}
 			}
+			read_unlock(&in6_dev->lock);
 		}
 
 		/* We did not find the address or the interface became NOMULTIPATH.
