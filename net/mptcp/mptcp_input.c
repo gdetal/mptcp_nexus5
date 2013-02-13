@@ -736,7 +736,7 @@ static int mptcp_queue_skb(struct sock *sk)
 	struct mptcp_cb *mpcb = tp->mpcb;
 	struct sk_buff *tmp, *tmp1;
 	u64 rcv_nxt64 = mptcp_get_rcv_nxt_64(meta_tp);
-	int eaten = 0;
+	bool data_queued = false;
 
 	/* Have we not yet received the full mapping? */
 	if (!tp->mptcp->mapping_present ||
@@ -801,6 +801,8 @@ static int mptcp_queue_skb(struct sock *sk)
 	} else {
 		/* Ready for the meta-rcv-queue */
 		skb_queue_walk_safe(&sk->sk_receive_queue, tmp1, tmp) {
+			int eaten = 0;
+
 			tp->copied_seq = TCP_SKB_CB(tmp1)->end_seq;
 			mptcp_prepare_skb(tmp1, tmp, sk);
 			__skb_unlink(tmp1, &sk->sk_receive_queue);
@@ -811,7 +813,6 @@ static int mptcp_queue_skb(struct sock *sk)
 				goto next;
 			}
 
-			eaten = 0;
 			/* Is direct copy possible ? */
 			if (TCP_SKB_CB(tmp1)->seq == meta_tp->rcv_nxt &&
 			    meta_tp->ucopy.task == current &&
@@ -839,6 +840,7 @@ static int mptcp_queue_skb(struct sock *sk)
 			if (eaten)
 				__kfree_skb(tmp1);
 
+			data_queued = true;
 next:
 			if (!skb_queue_empty(&sk->sk_receive_queue) &&
 			    !before(TCP_SKB_CB(tmp)->seq,
@@ -851,7 +853,7 @@ next:
 	tp->mptcp->last_data_seq = tp->mptcp->map_data_seq;
 	mptcp_reset_mapping(tp);
 
-	return !eaten ? -1 : -2;
+	return data_queued ? -1 : -2;
 }
 
 void mptcp_data_ready(struct sock *sk, int bytes)
