@@ -1554,6 +1554,11 @@ static int __init mptcp_init(void)
 	int ret = -ENOMEM;
 #ifdef CONFIG_SYSCTL
 	struct ctl_table_header *mptcp_sysclt;
+	struct ctl_path path[] = {
+		{ .procname = "net" },
+		{ .procname = "mptcp" },
+		{ },
+	};
 #endif
 
 	mptcp_sock_cache = kmem_cache_create("mptcp_sock",
@@ -1578,7 +1583,7 @@ static int __init mptcp_init(void)
 		goto mptcp_pm_failed;
 
 #ifdef CONFIG_SYSCTL
-	mptcp_sysclt = register_net_sysctl(&init_net, "net/mptcp", mptcp_table);
+	mptcp_sysclt = register_net_sysctl_table(&init_net, path, mptcp_table);
 	if (!mptcp_sysclt) {
 		ret = -ENOMEM;
 		goto register_sysctl_failed;
