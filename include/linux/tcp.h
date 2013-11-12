@@ -239,6 +239,48 @@ struct tcp_sack_block {
 	u32	end_seq;
 };
 
+struct tcp_out_options {
+	u16	options;	/* bit field of OPTION_* */
+	u8	ws;		/* window scale, 0 to disable */
+	u8	num_sack_blocks;/* number of SACK blocks to include */
+	u8	hash_size;	/* bytes in hash_location */
+	u16	mss;		/* 0 to disable */
+	__u32	tsval, tsecr;	/* need to include OPTION_TS */
+	__u8	*hash_location;	/* temporary pointer, overloaded */
+#ifdef CONFIG_MPTCP
+	u16	mptcp_options;	/* bit field of MPTCP related OPTION_* */
+	__sum16	dss_csum;	/* Overloaded field: dss-checksum required
+				 * (for SYN-packets)? Or dss-csum itself */
+
+	__u32	data_seq;	/* data sequence number, for MPTCP */
+	__u32	data_ack;	/* data ack, for MPTCP */
+
+	union {
+		struct {
+			__u64	sender_key;	/* sender's key for mptcp */
+			__u64	receiver_key;	/* receiver's key for mptcp */
+		} mp_capable;
+
+		struct {
+			__u64	sender_truncated_mac;
+			__u32	sender_nonce;
+					/* random number of the sender */
+			__u32	token;	/* token for mptcp */
+		} mp_join_syns;
+
+		struct {
+			char sender_mac[20];
+		} mp_join_ack;
+	};
+
+	struct mptcp_loc4 *addr4;/* v4 addresses for MPTCP */
+	struct mptcp_loc6 *addr6;/* v6 addresses for MPTCP */
+
+	u16	remove_addrs;	/* list of address id */
+	u8	addr_id;	/* address id */
+#endif /* CONFIG_MPTCP */
+};
+
 /*These are used to set the sack_ok field in struct tcp_options_received */
 #define TCP_SACK_SEEN     (1 << 0)   /*1 = peer is SACK capable, */
 #define TCP_FACK_ENABLED  (1 << 1)   /*1 = FACK is enabled locally*/
@@ -265,6 +307,9 @@ struct tcp_options_received {
 	u16	mss_clamp;	/* Maximal mss, negotiated at connection setup */
 };
 
+struct mptcp_cb;
+struct mptcp_tcp_sock;
+
 static inline void tcp_clear_options(struct tcp_options_received *rx_opt)
 {
 	rx_opt->tstamp_ok = rx_opt->sack_ok = 0;
@@ -290,6 +335,7 @@ struct tcp_request_sock {
 	u32				rcv_isn;
 	u32				snt_isn;
 	u32				snt_synack; /* synack sent time */
+	u8				saw_mpc:1;
 };
 
 static inline struct tcp_request_sock *tcp_rsk(const struct request_sock *req)
@@ -473,6 +519,34 @@ struct tcp_sock {
 	 * contains related tcp_cookie_transactions fields.
 	 */
 	struct tcp_cookie_values  *cookie_values;
+
+	struct mptcp_cb		*mpcb;
+	struct sock		*meta_sk;
+	/* We keep these flags even if CONFIG_MPTCP is not checked, because
+	 * it allows checking MPTCP capability just by checking the mpc flag,
+	 * rather than adding ifdefs everywhere.
+	 */
+	u16     mpc:1,          /* Other end is multipath capable */
+		inside_tk_table:1, /* Is the tcp_sock inside the token-table? */
+		send_mp_fclose:1,
+		request_mptcp:1, /* Did we send out an MP_CAPABLE?
+				  * (this speeds up mptcp_doit() in tcp_recvmsg)
+				  */
+		pf:1, /* Potentially Failed state: when this flag is set, we
+		       * stop using the subflow
+		       */
+		mp_killed:1, /* Killed with a tcp_done in mptcp? */
+		mptcp_add_addr_ack:1,	/* Tell tcp_send_ack to return in case
+					 * alloc_skb fails. */
+		was_meta_sk:1,	/* This was a meta sk (in case of reuse) */
+		close_it:1,	/* Must close socket in mptcp_data_ready? */
+		closing:1;
+	struct mptcp_tcp_sock *mptcp;
+#ifdef CONFIG_MPTCP
+	struct hlist_nulls_node tk_table;
+	u32		mptcp_loc_token;
+	u64		mptcp_loc_key;
+#endif /* CONFIG_MPTCP */
 };
 
 static inline struct tcp_sock *tcp_sk(const struct sock *sk)

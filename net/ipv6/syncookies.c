@@ -180,7 +180,7 @@ struct sock *cookie_v6_check(struct sock *sk, struct sk_buff *skb)
 
 	/* check for timestamp cookie support */
 	memset(&tcp_opt, 0, sizeof(tcp_opt));
-	tcp_parse_options(skb, &tcp_opt, &hash_location, 0);
+	tcp_parse_options(skb, &tcp_opt, &hash_location, NULL, 0);
 
 	if (!cookie_check_timestamp(&tcp_opt, &ecn_ok))
 		goto out;
@@ -255,7 +255,7 @@ struct sock *cookie_v6_check(struct sock *sk, struct sk_buff *skb)
 	tcp_select_initial_window(tcp_full_space(sk), req->mss,
 				  &req->rcv_wnd, &req->window_clamp,
 				  ireq->wscale_ok, &rcv_wscale,
-				  dst_metric(dst, RTAX_INITRWND));
+				  dst_metric(dst, RTAX_INITRWND), sk);
 
 	ireq->rcv_wscale = rcv_wscale;
 
